@@ -129,7 +129,7 @@ void UART0_IRQHandler()
 		{
 			if(temp!=LF)
 			{
-				if(!too_long)	                   // Jesli za dlugi ciag, ignoruj reszte znaków
+				if(!too_long)	                   // Jesli za dlugi ciag, ignoruj reszte znakÃ³w
 				{
 					rx_buf[rx_buf_pos] = temp;	   // Kompletuj komende
 					rx_buf_pos++;
