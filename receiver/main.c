@@ -22,9 +22,10 @@ uint8_t wynik_ok = 0;
 uint16_t temp;
 uint16_t	wynik;
 int recieveFlag = 0;
-static int minDotCnt = 81;																			// zmienne do rozróżniania . od - na podstawie zliczonych impulsów
-static int maxDotCnt = 0;
+static int minDotCnt = 20;																			// zmienne do rozróżniania . od - na podstawie zliczonych impulsów
+static int maxDotCnt = 40;
 uint16_t mCnt = 0;																			// wewnętrzny licznik do zliczania wywołań ADC
+uint16_t tempCnt = 0;
 //static char recChar;
 char recSym[] = {'0','0','0','0','0'};
 static int wordCnt = 0;
@@ -37,6 +38,8 @@ static int index = 0;																					// index do wyświetlania na LCD i zap
 	
 void PIT_IRQHandler()
 {
+	
+	// mCnt trzeba zamienić na tempCnt
 		// jeśli wywołane, oznacza że nie przyszedł nowy znak od jakiegoś czasu, i koniec nadawnia jednej - lub .
 	if (recieveFlag == 1){
 	//	porównuje impulsy z mCnt i robi z tego "." lub "-"
@@ -79,6 +82,7 @@ void PIT_IRQHandler()
 }
 
 
+
 void morseDecoder(char word[5]){
 	int i = 0;
 	if (word[0] == '-') i += 47; else if (word[0] == '.')i += 16;
@@ -90,6 +94,8 @@ void morseDecoder(char word[5]){
 }
 
 /*
+
+
 void ADC0_IRQHandler()
 {	
 	temp = ADC0->R[0];		// Odczyt danej i skasowanie flagi COCO
@@ -127,10 +133,40 @@ void ADC0_IRQHandler()
 
 */
 
+
+	uint8_t status = 0;
+
 void PORTB_IRQHandler(){
+//		if(status == 0){
+//			tempCnt = mCnt;
+//			status = 1;
+//		}else{
+//			tempCnt = mCnt - tempCnt;
+//			mCnt = 0;
+//			status = 0;
+//		}
+	
 	if(!wynik_ok){
 		wynik_ok=1;
+		tempCnt = mCnt - tempCnt;
+		//status = !status;
+
+		
+		//tempCnt = mCnt;
+		//mCnt = 0;
+		
+
+		
+	//	status++;
+	//	if (status > 1){status = 0; mCnt = 0;}
+		//mCnt++;
 	}
+
+	//NVIC_ClearPendingIRQ(PORTB_IRQn);				/* Clear NVIC any pending interrupts on PORTC_B */
+		//PORTB->PCR[1] &= ~PORT_ISFR_ISF_MASK;		// wykasowanie flagi
+		PORTB->PCR[1] |= PORT_PCR_IRQC_MASK;
+		NVIC_EnableIRQ(PORTB_IRQn);
+
 }
 
 int main (void)
@@ -144,20 +180,28 @@ int main (void)
 	port_Init();																					// Inicjalizacja portów
 	LCD1602_SetCursor(0,1);
 	LCD1602_Print("setup done");
-
+	
 
 	while(1)
 	{
 		LCD1602_SetCursor(0,1);
 		LCD1602_Print("while loop starts");		
-	  sprintf(recWord,"%hu",mCnt); // do kontroli
+	
+		sprintf(recWord,"%hu",tempCnt); // do kontroli
 		LCD1602_SetCursor(0,0);
 		LCD1602_Print(recWord);
-		LCD1602_Print(" licznik ");		// Ekran kontrolny
-	if(wynik_ok){
+		LCD1602_Print(" licznik ");	
 		mCnt++;
-		wynik_ok=0;
+	
+		
+	if(wynik_ok){
+		//mCnt++;
+		wynik_ok=0; 
+		
 
+		
+
+		//mCnt = 0;
 		/*
 		recieveFlag = 1;
 		// załączenie licznika PIT, zresetowanie stanu, trzeba sprawdzić czy dobrze działa tak
@@ -167,7 +211,6 @@ int main (void)
 		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
 		*/
 	}
-	//else if (!wynik_ok) {wynik_ok=1;}
-
+	
 	}
 }
