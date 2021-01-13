@@ -43,8 +43,8 @@ void PIT_IRQHandler()
 		// jeśli wywołane, oznacza że nie przyszedł nowy znak od jakiegoś czasu, i koniec nadawnia jednej - lub .
 	if (recieveFlag == 1){
 	//	porównuje impulsy z mCnt i robi z tego "." lub "-"
-		if ((mCnt >= minDotCnt) && (mCnt <= maxDotCnt)){recSym[wordCnt] = '.';}
-		else if((mCnt >= 2*minDotCnt) && (mCnt <= 2*maxDotCnt)){recSym[wordCnt] = '-';}
+		if ((mCnt >= 50) && (mCnt <= 80)){recSym[wordCnt] = '.';}
+		else if((mCnt >= 150) && (mCnt <= 250)){recSym[wordCnt] = '-';}
 		else {recSym[wordCnt] = '1';}												// błąd
 		wordCnt++;
 		mCnt = 0;
@@ -69,8 +69,8 @@ void PIT_IRQHandler()
 	morseDecoder(recSym);// wywołanie funkcji dekodującej
 	recWord[16-index] = recChar;
 	index++;
-			LCD1602_SetCursor(0,0);
-			LCD1602_Print("pit trigered case 2");
+			LCD1602_SetCursor(0,1);
+			LCD1602_Print(recWord);
 	//TO DO
 	// wywalenie na lcd litery
 	}
@@ -93,79 +93,27 @@ void morseDecoder(char word[5]){
 	recChar = morseTab[i-1];
 }
 
-/*
 
 
-void ADC0_IRQHandler()
-{	
-	temp = ADC0->R[0];		// Odczyt danej i skasowanie flagi COCO
-	if(!wynik_ok)					// Sprawdź, czy wynik skonsumowany przez pętlę główną
-	{
-		wynik = temp;				// Wyślij nową daną do pętli głównej
-		wynik_ok=1;
 
-
-	//	sprintf(recWord,"%hu",wynik); // do kontroli
-	//	LCD1602_SetCursor(0,1);
-	//	LCD1602_Print(recWord);
-	//	LCD1602_Print(" odczyt  ");
-	//	sprintf(recWord,"%hu",mCnt); // do kontroli
-	//	LCD1602_SetCursor(0,0);
-	//	LCD1602_Print(recWord);
-	//	LCD1602_Print(" licznik ");
-
-			if (wynik >100 ){
-			mCnt++;
-			//wynik_ok=0;
-			recieveFlag = 1;
-
-			// załączenie licznika PIT, zresetowanie stanu, trzeba sprawdzić czy dobrze działa tak
-			PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK;			// wyłączenie licznika
-			PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(BUS_CLOCK);	//czas między znakami
-			PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; 			// wystartowanie licznika
-			PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
-
-			}
-	}
-	NVIC_EnableIRQ(ADC0_IRQn);
-	ADC0->SC1[0] |= ADC_SC1_ADCH(12);		// Wyzwolenie programowe przetwornika ADC0 w kanale 12
-}
-
-*/
-
-
-	uint8_t status = 0;
+uint16_t status = 0;
 
 void PORTB_IRQHandler(){
-//		if(status == 0){
-//			tempCnt = mCnt;
-//			status = 1;
-//		}else{
-//			tempCnt = mCnt - tempCnt;
-//			mCnt = 0;
-//			status = 0;
-//		}
 	
-	if(!wynik_ok){
-		wynik_ok=1;
-		tempCnt = mCnt - tempCnt;
-		//status = !status;
+	
+//		LCD1602_SetCursor(0,1);
+//		LCD1602_Print("IRQ portB");	
+	
+		//wynik_ok=1;
+		mCnt++;
+		recieveFlag = 1;
+		PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK;			 // wyłączenie licznika
+		PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(BUS_CLOCK/2);	//czas między znakami
+		PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; 			// wystartowanie licznika
+		PIT->CHANNEL[0].TFLG |= PIT_TFLG_TIF_MASK;	
 
-		
-		//tempCnt = mCnt;
-		//mCnt = 0;
-		
-
-		
-	//	status++;
-	//	if (status > 1){status = 0; mCnt = 0;}
-		//mCnt++;
-	}
-
-	//NVIC_ClearPendingIRQ(PORTB_IRQn);				/* Clear NVIC any pending interrupts on PORTC_B */
-		//PORTB->PCR[1] &= ~PORT_ISFR_ISF_MASK;		// wykasowanie flagi
-		PORTB->PCR[1] |= PORT_PCR_IRQC_MASK;
-		NVIC_EnableIRQ(PORTB_IRQn);
+		PORTB->PCR[1] |= PORT_PCR_IRQC_MASK;    // wykasowanie flagi
+		//NVIC_EnableIRQ(PORTB_IRQn);
 
 }
 
@@ -179,24 +127,34 @@ int main (void)
 	PIT_Init();																					  // Inicjalizacja licznika PIT0
 	port_Init();																					// Inicjalizacja portów
 	LCD1602_SetCursor(0,1);
-	LCD1602_Print("setup done");
+	LCD1602_Print("setup");
 	
 
 	while(1)
 	{
 		LCD1602_SetCursor(0,1);
-		LCD1602_Print("while loop starts");		
+		sprintf(recWord,"%hu",status); // do kontroli
+		LCD1602_Print(recWord);
+		LCD1602_Print(" status");		
 	
-		sprintf(recWord,"%hu",tempCnt); // do kontroli
+		sprintf(recWord,"%hu",mCnt); // do kontroli
 		LCD1602_SetCursor(0,0);
 		LCD1602_Print(recWord);
 		LCD1602_Print(" licznik ");	
-		mCnt++;
-	
-		
-	if(wynik_ok){
 		//mCnt++;
-		wynik_ok=0; 
+		
+
+				//mCnt++;
+
+	if(wynik_ok){
+		wynik_ok=0;
+		//tempCnt = mCnt;
+
+		LCD1602_SetCursor(0,1);
+		LCD1602_Print("wynik ok flag");	
+		
+		//mCnt++;
+		 
 		
 
 		
@@ -211,6 +169,6 @@ int main (void)
 		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
 		*/
 	}
-	
+
 	}
 }
