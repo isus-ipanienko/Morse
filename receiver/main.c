@@ -38,20 +38,18 @@ char recChar = 'k';
 void morseDecoder(char word[5]);	
 int symCnt = 0;
 uint64_t bool_map = 0;
+uint64_t bool_map_temp = 0;
 int position = 0;
 	int zero_cnt=0;
 	int translate_flag = 0;
+	int break_flag = 0;
+	int ones_cnt = 0;
 
 static int index = 0;	
 void PIT_IRQHandler(){
 	
 	int tempCnt = mCnt;
 	mCnt = 0;
-		//sprintf(display,"%hu",tempCnt);
-		//LCD1602_SetCursor(0,0);
-		//LCD1602_Print(display);
-		//LCD1602_SetCursor(0,0);
-		//LCD1602_Print(recSym);
 	
 	if(tempCnt > 60){
 		bool_map |= 1<<position;
@@ -61,14 +59,13 @@ void PIT_IRQHandler(){
 	}
 	if(zero_cnt == 3){
 		translate_flag = 1;
+		break_flag = position;
+		bool_map_temp = bool_map;
+		bool_map = 0;
+		position = -1;
 	}
 	position++;
 	
-	if( position == 64){
-		sprintf(display,"%d",bool_map);
-		LCD1602_SetCursor(0,0);
-		LCD1602_Print(display);
-	}
 	
 	PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;		// Skasuj flagę żądania przerwania
 	NVIC_ClearPendingIRQ(PIT_IRQn);
@@ -110,7 +107,7 @@ int main (void)
 //	uint32_t i=0;
 	LCD1602_Init();		 																		// Inicjalizacja wyświetlacza LCD
 	LCD1602_Backlight(TRUE);
-	LCD1602_Print("--");																	// Ekran kontrolny
+	LCD1602_Print("xx");																	// Ekran kontrolny
 	PIT_Init();																					  // Inicjalizacja licznika PIT0
 	port_Init();																					// Inicjalizacja portów
 	LCD1602_SetCursor(0,1);
@@ -121,9 +118,32 @@ int main (void)
 	{
 		if(translate_flag){
 			translate_flag = 0;
-			for(int i = 0; i < 22; i++){
-				
+			ones_cnt = 0;
+			for(int i = 0; i < break_flag; i++){
+				if(bool_map_temp & 1<<i){
+					ones_cnt++;
+				}else{
+					if(ones_cnt == 1){
+						recSym[symCnt++] = '.';
+					}else if(ones_cnt == 3){
+						recSym[symCnt++] = '-';
+					}
+					ones_cnt = 0;
+				}
 			}
+			
+			morseDecoder(recSym);
+			recWord[wordCnt++] = recChar;
+			
+			LCD1602_SetCursor(0,0);
+			LCD1602_Print(recSym);
+			sprintf(display,"%d",bool_map_temp);
+			
+			for(int i = 0; i < 5; i++){recSym[i] = '0';}
+			symCnt = 0;
+			
+			LCD1602_SetCursor(0,1);
+			LCD1602_Print(recWord);
 		}
 
 		
