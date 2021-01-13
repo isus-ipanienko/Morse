@@ -15,15 +15,16 @@
 #include <string.h>
 #include <stdlib.h>
 //#include "uart0.h"
-	
+#define TIME_UNIT BUS_CLOCK/10
 
-float adc_volt_coeff = ((float)(((float)2.91) / 4095) );			// Współczynnik korekcji wyniku, w stosunku do napięcia referencyjnego przetwornika
+//float adc_volt_coeff = ((float)(((float)2.91) / 4095) );			// Współczynnik korekcji wyniku, w stosunku do napięcia referencyjnego przetwornika
 uint8_t wynik_ok = 0;
 uint16_t temp;
 uint16_t	wynik;
 int recieveFlag = 0;
 static int minDotCnt = 20;																			// zmienne do rozróżniania . od - na podstawie zliczonych impulsów
 static int maxDotCnt = 40;
+int sampling_on = 0;
 uint16_t mCnt = 0;																			// wewnętrzny licznik do zliczania wywołań ADC
 uint16_t tempCnt = 0;
 //static char recChar;
@@ -31,54 +32,46 @@ char recSym[] = {'0','0','0','0','0'};
 static int wordCnt = 0;
 char morseTab[] = {'5','H','4','S','-','V','3','I','-','F','-','U','-','-','2','E','-','L','-','R','-','-','-','A','-','P','-','W','-','J','1','6','B','-','D','-','X','-','N','-','C','-','K','-','Y','-','T','7','Z','-','G','-','Q','-','M','8','-','-','O','9','-','0'};
 char recWord[] = {0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20};
-char recChar;
-void morseDecoder(char word[5]);	
 
-static int index = 0;																					// index do wyświetlania na LCD i zapisywania w recWord
+	char display[]={0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20};
+char recChar = 'k';
+void morseDecoder(char word[5]);	
+int symCnt = 0;
+uint64_t bool_map = 0;
+int position = 0;
+	int zero_cnt=0;
+	int translate_flag = 0;
+
+static int index = 0;	
+void PIT_IRQHandler(){
 	
-void PIT_IRQHandler()
-{
+	int tempCnt = mCnt;
+	mCnt = 0;
+		//sprintf(display,"%hu",tempCnt);
+		//LCD1602_SetCursor(0,0);
+		//LCD1602_Print(display);
+		//LCD1602_SetCursor(0,0);
+		//LCD1602_Print(recSym);
 	
-	// mCnt trzeba zamienić na tempCnt
-		// jeśli wywołane, oznacza że nie przyszedł nowy znak od jakiegoś czasu, i koniec nadawnia jednej - lub .
-	if (recieveFlag == 1){
-	//	porównuje impulsy z mCnt i robi z tego "." lub "-"
-		if ((mCnt >= 50) && (mCnt <= 80)){recSym[wordCnt] = '.';}
-		else if((mCnt >= 150) && (mCnt <= 250)){recSym[wordCnt] = '-';}
-		else {recSym[wordCnt] = '1';}												// błąd
-		wordCnt++;
-		mCnt = 0;
-			LCD1602_SetCursor(0,0);
-			LCD1602_Print("pit trigered case 1");
-		
-	// ustawienie licznika na przypuszczalne następne słowo
-		PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK; // wyłączenie licznika
-		PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(3*BUS_CLOCK);	// BUS_CLOCK - 1s /*czas między słowami - czas między znakami*/
-		PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; // wystartowanie licznika
-		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
-		recieveFlag++;
-		
-	// jeśli będzie nadawany następny char morsa, to powyższy licznik nie dobiegnie końca (zostanie nadpisany przez ten w while(1)
-	// i do recSym zostanie dodany następny char morsa.
-	// jeśli dobiegnie do końca, oznacza to że odebraliśmy już całe słowo w dziedzinie morsa, i zostanie wykonany warunek poniżej 
+	if(tempCnt > 60){
+		bool_map |= 1<<position;
+		zero_cnt = 0;
+	} else {
+		zero_cnt++;
 	}
-	else if(recieveFlag > 1){
-	// zaczyna nowy symbol
-		mCnt = 0;
-		wordCnt = 0;
-	morseDecoder(recSym);// wywołanie funkcji dekodującej
-	recWord[16-index] = recChar;
-	index++;
-			LCD1602_SetCursor(0,1);
-			LCD1602_Print(recWord);
-	//TO DO
-	// wywalenie na lcd litery
+	if(zero_cnt == 3){
+		translate_flag = 1;
 	}
-	else {/*nie powinno być wywołane*/};
-			LCD1602_SetCursor(0,0);
-			LCD1602_Print("pit trigered case 3");
-	//resztki
-	//PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;		// Skasuj flagę żądania przerwania
+	position++;
+	
+	if( position == 64){
+		sprintf(display,"%d",bool_map);
+		LCD1602_SetCursor(0,0);
+		LCD1602_Print(display);
+	}
+	
+	PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;		// Skasuj flagę żądania przerwania
+	NVIC_ClearPendingIRQ(PIT_IRQn);
 }
 
 
@@ -101,74 +94,38 @@ uint16_t status = 0;
 void PORTB_IRQHandler(){
 	
 	
-//		LCD1602_SetCursor(0,1);
-//		LCD1602_Print("IRQ portB");	
+		if(sampling_on == 0){
+			sampling_on = 1;
+			PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TEN_MASK;
+		}
 	
-		//wynik_ok=1;
 		mCnt++;
-		recieveFlag = 1;
-		PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK;			 // wyłączenie licznika
-		PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(BUS_CLOCK/2);	//czas między znakami
-		PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; 			// wystartowanie licznika
-		PIT->CHANNEL[0].TFLG |= PIT_TFLG_TIF_MASK;	
-
-		PORTB->PCR[1] |= PORT_PCR_IRQC_MASK;    // wykasowanie flagi
-		//NVIC_EnableIRQ(PORTB_IRQn);
+	
+		PORTB->PCR[1] |= PORT_PCR_IRQC_MASK;
 
 }
 
 int main (void)
 {
 //	uint32_t i=0;
-//	char display[]={0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20};
 	LCD1602_Init();		 																		// Inicjalizacja wyświetlacza LCD
 	LCD1602_Backlight(TRUE);
-	LCD1602_Print("---");																	// Ekran kontrolny
+	LCD1602_Print("--");																	// Ekran kontrolny
 	PIT_Init();																					  // Inicjalizacja licznika PIT0
 	port_Init();																					// Inicjalizacja portów
 	LCD1602_SetCursor(0,1);
-	LCD1602_Print("setup");
+	LCD1602_Print("--");
 	
 
 	while(1)
 	{
-		LCD1602_SetCursor(0,1);
-		sprintf(recWord,"%hu",status); // do kontroli
-		LCD1602_Print(recWord);
-		LCD1602_Print(" status");		
-	
-		sprintf(recWord,"%hu",mCnt); // do kontroli
-		LCD1602_SetCursor(0,0);
-		LCD1602_Print(recWord);
-		LCD1602_Print(" licznik ");	
-		//mCnt++;
-		
-
-				//mCnt++;
-
-	if(wynik_ok){
-		wynik_ok=0;
-		//tempCnt = mCnt;
-
-		LCD1602_SetCursor(0,1);
-		LCD1602_Print("wynik ok flag");	
-		
-		//mCnt++;
-		 
-		
+		if(translate_flag){
+			translate_flag = 0;
+			for(int i = 0; i < 22; i++){
+				
+			}
+		}
 
 		
-
-		//mCnt = 0;
-		/*
-		recieveFlag = 1;
-		// załączenie licznika PIT, zresetowanie stanu, trzeba sprawdzić czy dobrze działa tak
-		PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK;			// wyłączenie licznika
-		PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(BUS_CLOCK);	//czas między znakami
-		PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; 			// wystartowanie licznika
-		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
-		*/
-	}
-
 	}
 }
