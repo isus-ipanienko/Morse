@@ -10,5 +10,5 @@ Based on Freescale FRDM-KL05Z board, with aditionall basic modules like: speaker
 
 
 made by:
-  Cezary Szczepański
+  Cezary Szczepański,
   Paweł Religa
