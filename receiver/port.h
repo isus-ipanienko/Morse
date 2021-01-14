@@ -3,13 +3,9 @@ Authors: Cezary Szczepañski, Pawe³ Religa
 Subject: Techinka Mikroprocesorowa 2
 University: AGH Univerity of Science and Technology
 Project: Morse code reciever with decoding
-Section: Library for PIT initialization
+Section: Library for port initialization
 ---------------------------------------------------------------------------------------------------------*/
 
-#ifndef pit_h
-#define pit_h
-#define BUS_CLOCK SystemCoreClock/2
+#include "MKL05Z4.h"
 
-void PIT_Init(void);
-
-#endif
+void port_Init(void);

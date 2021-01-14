@@ -1,80 +1,115 @@
 /*--------------------------------------------------------------------------------------------------------
-					Technika Mikroprocesorowa 2 - laboratorium
-					Lab 5 - Ćwiczenie 4: wyzwalanie sprzętowe przetwornika A/C - tryb wyzwalania na żądanie (PIT0)
-					autor: Mariusz Sokołowski
-					wersja: 07.11.2020r.
+Authors: Cezary Szczepański, Paweł Religa
+Subcject: Techinka Mikroprocesorowa 2
+University: AGH Univerity of Science and Technology
+Project: Morse code reciever with decoding
 ---------------------------------------------------------------------------------------------------------*/
+
+
+/*
+					REALIZACJA PROGRAMU
+	Kod Morse'a dla każdego znaku przypisuję serię '.' i '-'. Dodatkowo wykorzystuje stałą czasową, dla rozróżnienia
+	tych dwóch symboli, a także dla wyznaczenia kolejnego symbolu oraz nadawanego wyrazu.	
+	Czas trwania symboli:
+		- '.': jedna stała czasowa
+		- '-': trzy stałe czasowe
+		- przerwa między nadawanymi symbolami: jedna stała czasowa
+		- przerwa między nadawanymi literami: trzy stałe czasowe
+		- przerwa między nadawanymi wyrazami: siedem stałych czasowych
+	
+	Dodatkowo każdy nadawany symbol, ma nie więcej niż 5 znaków.
+*/
 					
 #include "MKL05Z4.h"
-#include "ADC.h"
 #include "pit.h"
 #include "frdm_bsp.h"
 #include "lcd1602.h"
+#include "port.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-//#include "uart0.h"
+#define TIME_UNIT BUS_CLOCK/10
 
-
-float adc_volt_coeff = ((float)(((float)2.91) / 4095) );			// Współczynnik korekcji wyniku, w stosunku do napięcia referencyjnego przetwornika
-uint8_t wynik_ok=0;
+uint8_t wynik_ok = 0;
 uint16_t temp;
-float	wynik;
-int recieveFlag = 0;
-static int minDotCnt = 5;																			// zmienne do rozróżniania . od - na podstawie zliczonych impulsów
-static int maxDotCnt = 7;
-static uint8_t mCnt = 0;																			// wewnętrzny licznik do zliczania wywołań ADC
-//static char recChar;
+uint16_t wynik;
+int sampling_on = 0;
+uint16_t mCnt = 0;																				
+uint16_t tempCnt = 0;
 char recSym[] = {'0','0','0','0','0'};
 static int wordCnt = 0;
+//													DEKLARACJA TABLICY DO DEKODOWANIA kodu Morse'a
 char morseTab[] = {'5','H','4','S','-','V','3','I','-','F','-','U','-','-','2','E','-','L','-','R','-','-','-','A','-','P','-','W','-','J','1','6','B','-','D','-','X','-','N','-','C','-','K','-','Y','-','T','7','Z','-','G','-','Q','-','M','8','-','-','O','9','-','0'};
 char recWord[] = {0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20};
-char recChar;
-void morseDecoder(char word[5]);	
+char display[]={0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20};
+char recChar = 'x';
 
-static int index = 0;																					// index do wyświetlania na LCD i zapisywania w recWord
-	
-void PIT_IRQHandler()
-{
-		// jeśli wywołane, oznacza że nie przyszedł nowy znak od jakiegoś czasu, i koniec nadawnia jednej - lub .
-	if (recieveFlag == 1){
-	//	porównuje impulsy z mCnt i robi z tego "." lub "-"
-		if ((mCnt >= minDotCnt) && (mCnt <= maxDotCnt)){recSym[wordCnt] = '.';}
-		else if((mCnt >= 2*minDotCnt) && (mCnt <= 2*maxDotCnt)){recSym[wordCnt] = '-';}
-		else {recSym[wordCnt] = '1';}												// błąd
-		wordCnt++;
-		mCnt = 0;
+int symCnt = 0;
+uint64_t bool_map = 0;
+uint64_t bool_map_temp = 0;
+int position = 0;
+int zero_cnt=0;
+int translate_flag = 0;
+int break_flag = 0;
+int ones_cnt = 0;
+int space_flag = 0;
+static int index = 0;	
 
-		
-	// ustawienie licznika na przypuszczalne następne słowo
-		PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK; // wyłączenie licznika
-		PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(5*BUS_CLOCK);	// BUS_CLOCK - 1s /*czas między słowami - czas między znakami*/
-		PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; // wystartowanie licznika
-		PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
-		recieveFlag++;
-		
-	// jeśli będzie nadawany następny char morsa, to powyższy licznik nie dobiegnie końca (zostanie nadpisany przez ten w while(1)
-	// i do recSym zostanie dodany następny char morsa.
-	// jeśli dobiegnie do końca, oznacza to że odebraliśmy już całe słowo w dziedzinie morsa, i zostanie wykonany warunek poniżej 
+void morseDecoder(char word[5]);
+
+void PORTB_IRQHandler() {
+													//	Obsługa przerwań GPIO na portB1. Mikrofon rejestrując sygnał, zmienia stan z wysokiego (1.5V) na niski. Każdorazowe takie zbocze 
+													//	opadające jest zliczane w zmiennej mCnt. 
+
+	if (sampling_on == 0) {							//	Funkcja do obsługi próbkowania sygnału z mikrofonu. Włącza licznik PIT gdy pojawi się pierwsze zbocze na portB.
+		sampling_on = 1;
+		PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TEN_MASK;
 	}
-	else if(recieveFlag > 1){
-	// zaczyna nowy symbol
-		mCnt = 0;
-		wordCnt = 0;
-	morseDecoder(recSym);// wywołanie funkcji dekodującej
-	recWord[16-index] = recChar;
-	index++;
-	//TO DO
-	// wywalenie na lcd litery
-	}
-	else {/*nie powinno być wywołane*/};
-		
-	//resztki
-	//PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;		// Skasuj flagę żądania przerwania
+
+	mCnt++;
+
+	PORTB->PCR[1] |= PORT_PCR_IRQC_MASK;			//	Wykasowanie flagi żądania przerwania.
+
 }
 
 
+void PIT_IRQHandler(){
+													//	Licznik PIT, wywoływany po 1 jednostce czasowej. Sprawdza ile razy wystąpiły zbocza opadające w sygnale od mikrofonu od ostatniego 
+													//	wywołania PIT. Jeśli mikrofon zanotował sygnał, ustawia bit w rejestrze bool_map na wysoki, jeśli nie zostawia w stanie niskim.
+													//	Kolejne wywołania, ustawiają kolejne bity.
+	int tempCnt = mCnt;
+	mCnt = 0;
+	
+	if(tempCnt > 60){
+		bool_map |= 1<<position;
+		zero_cnt = 0;
+	} else {
+		zero_cnt++;
+	}
+	if(zero_cnt == 3){								//	Jeśli wystąpiły 3 zera, oznacza to że zakończono nadawanie jednej litery alfabetu.
+		translate_flag = 1;							//	Ustawienie flagi wyzwalającej tłumaczenie.
+		break_flag = position;
+		bool_map_temp = bool_map;
+		bool_map = 0;
+		position = -1;
+	}
+	if(zero_cnt == 7){								// Wystąpienie 7 zer, oznacza przerwę między wyrazową w nadawnym zdaniu
+		space_flag = 1;
+	}
+	position++;
+	
+	
+	PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;		// Skasuj flagę żądania przerwania
+	NVIC_ClearPendingIRQ(PIT_IRQn);
+}
+
+
+
 void morseDecoder(char word[5]){
+													//	Algorytm dekodowania został stworzony na podstawie schematu: https://en.wikipedia.org/wiki/Morse_code#/media/File:Morse_code_tree3.svg
+													//	Zbudowano do tego specjalną tbalicę morseTab. Funkcja polega na poruszaniu się po owej tablicy. Indexy są odpwiednio zwiększane 
+													//	lub zmniejszane, zależnie od tego jaki znak jest w przekazanym słowie. 
+
 	int i = 0;
 	if (word[0] == '-') i += 47; else if (word[0] == '.')i += 16;
 	if (word[1] == '-') i += 8; else if (word[1] == '.') i -= 8; else recChar =  morseTab[i-1];
@@ -84,71 +119,56 @@ void morseDecoder(char word[5]){
 	recChar = morseTab[i-1];
 }
 
-void ADC0_IRQHandler()
-{	
-	temp = ADC0->R[0];		// Odczyt danej i skasowanie flagi COCO
-	if(!wynik_ok)					// Sprawdź, czy wynik skonsumowany przez pętlę główną
-	{
-		wynik = temp;				// Wyślij nową daną do pętli głównej
-		wynik_ok=1;
-	}
-	NVIC_EnableIRQ(ADC0_IRQn);
-	ADC0->SC1[0] |= ADC_SC1_ADCH(12);		// Wyzwolenie programowe przetwornika ADC0 w kanale 12
-}
+
+
+
+
 int main (void)
 {
-	uint8_t	kal_error;
-//	uint32_t i=0;
-	uint8_t NegCntrlVal = 0; 																// wartość do której porównywany będzie odebrany sygnał, do ustalenia
-	uint8_t PosCntrlVal = 0;
-
-//	char display[]={0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20,0x20};
-	LCD1602_Init();		 																		// Inicjalizacja wyświetlacza LCD
+	LCD1602_Init();		 							// Inicjalizacja wyświetlacza LCD
+	PIT_Init();										// Inicjalizacja licznika PIT0
+	port_Init();									// Inicjalizacja portów
 	LCD1602_Backlight(TRUE);
-	LCD1602_Print("---");																	// Ekran kontrolny
-	PIT_Init();																					  // Inicjalizacja licznika PIT0
-	//UART0_Init();																					// Inicjalizacja portu szeregowego UART0
-
-	kal_error=ADC_Init();																	// Inicjalizacja i kalibracja przetwornika A/C
-	if(kal_error)
-	{
-		while(1);																						// Klaibracja się nie powiodła
-	}
-		ADC0->SC1[0] = ADC_SC1_AIEN_MASK | ADC_SC1_ADCH(12);		// Pierwsze wyzwolenie przetwornika ADC0 w kanale 12 i odblokowanie przerwania
-
-	//ADC0->SC1[0] = ADC_SC1_AIEN_MASK | ADC_SC1_ADCH(4);		// Odblokowanie przerwania i wybranie kanału nr 4
+	LCD1602_Print("xx");							// Ekran kontrolny
+	LCD1602_SetCursor(0,1);
+	LCD1602_Print("--");
 	
-																												// Inicjalizacja mikrofonu
-																												// TO DO
+
 	while(1)
 	{
-		if(wynik_ok && (wynik >=PosCntrlVal || wynik <= NegCntrlVal))
-		{
-			mCnt++;
-			wynik_ok=0;
-			recieveFlag = 1;
-
-			// załączenie licznika PIT, zresetowanie stanu, trzeba sprawdzić czy dobrze działa tak
-			PIT->CHANNEL[0].TCTRL &= ~PIT_TCTRL_TIE_MASK;			// wyłączenie licznika
-			PIT->CHANNEL[0].LDVAL = PIT_LDVAL_TSV(BUS_CLOCK);	/*czas między znakami*/
-			PIT->CHANNEL[0].TCTRL |= PIT_TCTRL_TIE_MASK; 			// wystartowanie licznika
-			PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;	
+		if(translate_flag){							//	Wywołanie warunku oznacza, że wystąpiła przerwa między nadawanymi znakami. 
+			translate_flag = 0;						//	Na podstawie zawartości rejestru bool_map pętla while rozpoznaje znak jako '.' lub '-', i zapisuje znak do recSym.
+			ones_cnt = 0;
+			for(int i = 0; i < break_flag; i++){
+				if(bool_map_temp & 1<<i){
+					ones_cnt++;
+				}else{
+					if(ones_cnt == 1){
+						recSym[symCnt++] = '.';
+					}else if(ones_cnt == 3){
+						recSym[symCnt++] = '-';
+					}
+					ones_cnt = 0;
+				}
+			}
 			
-			//		WORK IN PROGRESS
+			morseDecoder(recSym);					//	Po rozpoznaniu zawartości rejestru bool_map i rozdzieleniu na odpowiednie znaki,
+			recWord[wordCnt++] = recChar;			//	zarejstrowane znaki są przekazywane do tłumaczenia na litery alfabetu.
 			
-			//wynik = wynik*adc_volt_coeff;		// Dostosowanie wyniku do zakresu napięciowego
-			//sprintf(display,"U=%.4fV",wynik);
 			LCD1602_SetCursor(0,0);
-			LCD1602_Print(recWord);
-			/*for(i=0;display[i]!=0;i++)
-			{
-				while(!(UART0->S1 & UART0_S1_TDRE_MASK));
-				UART0->D = display[i];
-			}*/
+			LCD1602_Print(recSym);
 			
-			wynik_ok=0;			
+			for(int i = 0; i < 5; i++){recSym[i] = '0';}
+			symCnt = 0;
+			
+			LCD1602_SetCursor(0,1);
+			LCD1602_Print(recWord);					//	Wysyłanie odczytanej litery na ekran.
 		}
-		else if (wynik_ok) {wynik_ok=0;}
+		
+		if(space_flag){								//	Rozpoznanie i wyświetlenie spacji w odebranym zdaniu.
+			space_flag = 0;
+			recWord[wordCnt++] = ' ';
+		}
 		
 	}
 }
