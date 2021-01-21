@@ -74,8 +74,8 @@ int main (void) {
 		if(rx_FULL)		             // if message ready
 		{
 			if(!too_long){
-				Morse_Encoder(rx_buf);   
-				rx_FULL=0;	           // message played
+				Morse_Encoder(rx_buf);   	// play message stored in rx_buf
+				rx_FULL=0;	           // message played, reset flags
 				rx_buf_pos = 0;
 				}
 		}
@@ -88,15 +88,15 @@ void Morse_Encoder(char* str){
 	for (int j = 0; j < rx_buf_pos; j++){
 		
 		if ((uint8_t)*str == 32){ 
-			DELAY(7*CYCLE) // wait 7 cycles (between words)
-			str++;
+			DELAY(7*CYCLE) // if space, wait for 7 cycles
+			str++; // next letter
 			continue;
 		}
 		
-		if ((uint8_t)*str > 60) offset = 55;
+		if ((uint8_t)*str > 60) offset = 55;  // choose different offset for letters and digits
 		else offset = 48;
 		
-		for (int i = 0; i < 5; i++){
+		for (int i = 0; i < 5; i++){ // max Morse character length = 5
 			
 			if (morse_map[*str-offset][i] == '0') {
 				DELAY(CYCLE)   // wait 1 cycle (between letters)
@@ -104,18 +104,18 @@ void Morse_Encoder(char* str){
 			} 
 			else if (morse_map[*str-offset][i] == '.'){ 
 				TPM0_PCM_Play(1);
-				DELAY(CYCLE)   // wait for speaker to stop playing
+				DELAY(CYCLE)   // wait for the speaker to stop playing
 			}
 			else {
 				TPM0_PCM_Play(3);
-				DELAY(3*CYCLE) // wait for speaker to stop playing
+				DELAY(3*CYCLE) // wait for the speaker to stop playing
 			}
-			DELAY(CYCLE)   // wait 1 cycle (inter-element)
+			DELAY(CYCLE)   // wait 1 cycle (between dots and dashes)
 		}
 		
 		DELAY(2*CYCLE)     // wait 2+1 cycles (between letters)
 		
-		str++;
+		str++; // next letter
 	}
 	
 }
