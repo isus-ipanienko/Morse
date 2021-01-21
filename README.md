@@ -6,7 +6,7 @@ Based on Freescale FRDM-KL05Z board, with additional basic modules like: speaker
 
 * Project includes unique coding, and decoding algorithm.
 
-* All code is written by us, unless specified otherwise in file header.
+* All code is written by us, unless specified otherwise in the file header.
 
 
 
