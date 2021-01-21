@@ -20,7 +20,7 @@ List of Components
 
 Simple UML for reciever
 
-![Alt text](https://github.com/isus-ipanienko/Morse/blob/main/receiver/UML%20reciever(3).png?raw=true)
+![Alt text](https://github.com/isus-ipanienko/Morse/blob/main/receiver/UML%20reciever(4).png?raw=true)
 
 
 UML for transmiter
