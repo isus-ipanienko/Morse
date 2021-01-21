@@ -23,8 +23,8 @@ void TPM0_Init_PCM(void) {
 	TPM0->SC |= TPM_SC_PS(2);  					  // 41,9MHz / 4 ~ 10,48MHz
 	TPM0->SC |= TPM_SC_CMOD(1);					  // internal input clock source
 
-	TPM0->MOD = 255; 										  // 8bit PCM
-																				// 10,48MHz / 256 ~ 40,96kHz
+	TPM0->MOD = 255; 						  // 8bit PCM
+									// 10,48MHz / 256 ~ 40,96kHz
 	
 // "Edge-aligned PWM true pulses" mode -> PCM output
 	TPM0->SC &= ~TPM_SC_CPWMS_MASK; 		
@@ -47,9 +47,9 @@ void TPM0_Init_PCM(void) {
 	tpm0Enabled = 1;  /* set local flag */
 }
 
-void TPM0_PCM_Play(uint8_t len) {
+void TPM0_PCM_Play(uint8_t len) {	
 	sampleCNT = 0;               // start from the beginning
-	loopMultiplier = 200 * len;  // play this many sine loops
+	loopMultiplier = 200 * len;  // len - play this many sine loops
 	playFlag = 1;
 }
 
