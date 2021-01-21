@@ -9,6 +9,24 @@ Based on Freescale FRDM-KL05Z board, with aditionall basic modules like: speaker
 
 
 
+List of Components
+- FRDM-KL05Z
+- waveshare LM386M speaker 
+- Iduino ST1146 sound detector
+- 1602A lcd screen
+
+
+
+
+Simple UML for reciever
+
+![Alt text](https://github.com/isus-ipanienko/Morse/blob/main/receiver/UML%20reciever(3).png?raw=true)
+
+
+UML for transmiter
+
+![Alt text](https://github.com/isus-ipanienko/Morse/blob/main/transmitter/UML%20transmiter.png?raw=true)
+
 made by:
   Cezary Szczepański,
   Paweł Religa
