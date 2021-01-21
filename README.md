@@ -2,11 +2,11 @@
 
 TM2 final project.
 
-Based on Freescale FRDM-KL05Z board, with aditionall basic modules like: speaker, microphone and lcd(2x16) screen.
+Based on Freescale FRDM-KL05Z board, with additional basic modules like: speaker, microphone and lcd(2x16) screen.
 
-* Project includes unique coding, and decoding algorythm.
+* Project includes unique coding, and decoding algorithm.
 
-* All code is written by us, unless otherwise specified in file header.
+* All code is written by us, unless specified otherwise in file header.
 
 
 
