@@ -155,13 +155,13 @@ int main (void)
 			morseDecoder(recSym);					//	Po rozpoznaniu zawartości rejestru bool_map i rozdzieleniu na odpowiednie znaki,
 			recWord[wordCnt++] = recChar;			//	zarejstrowane znaki są przekazywane do tłumaczenia na litery alfabetu.
 			
-			LCD1602_SetCursor(0,0);
-			LCD1602_Print(recSym);
+			//LCD1602_SetCursor(0,0);
+			//LCD1602_Print(recSym);
 			
 			for(int i = 0; i < 5; i++){recSym[i] = '0';}
 			symCnt = 0;
 			
-			LCD1602_SetCursor(0,1);
+			LCD1602_SetCursor(0,0);
 			LCD1602_Print(recWord);					//	Wysyłanie odczytanej litery na ekran.
 		}
 		
